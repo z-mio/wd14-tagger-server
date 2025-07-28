@@ -1,8 +1,9 @@
+import os
 import pathlib
 from urllib.error import URLError
 
+import requests
 from loguru import logger
-from robust_downloader import download
 
 
 async def download_file(file_name: str, file_url: str, file_dir: str):
@@ -14,8 +15,23 @@ async def download_file(file_name: str, file_url: str, file_dir: str):
     :return: None
     :raises: DownloadError, FileSizeMismatchError
     """
-    if download(url=file_url, folder=file_dir, filename=file_name):
+    file_path = pathlib.Path(file_dir) / file_name
+
+    try:
+        response = requests.get(file_url, stream=True)
+        response.raise_for_status()
+
+        with open(file_path, "wb") as f:
+            for chunk in response.iter_content(chunk_size=8192):
+                if chunk:
+                    f.write(chunk)
+
         logger.success(f"Download file {file_name} from {file_url} success")
+    except requests.RequestException as e:
+        if file_path.exists():
+            os.remove(file_path)  # Clean up partial download
+        raise URLError(f"Failed to download {file_name}: {str(e)}")
+
 
 
 async def download_model(model_name: str, file_dir: str = "models") -> str:
